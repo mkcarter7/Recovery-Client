@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Container, Row, Col, Card, Button, Alert, Table, Badge } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Alert, Table, Badge, Modal } from 'react-bootstrap';
 import { useAuth } from '@/utils/context/authContext';
 import { signOut } from '@/utils/auth';
 import { apiClient } from '@/api/client';
@@ -15,6 +15,8 @@ function AdminPage() {
   const [newsletterSubscriptions, setNewsletterSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deleteModal, setDeleteModal] = useState({ show: false, type: null, id: null, name: null });
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     // Redirect to home if user is not authenticated
@@ -30,13 +32,85 @@ function AdminPage() {
       setLoading(true);
       setError('');
 
+      // Mock data for development (remove when backend is ready)
+      const USE_MOCK_DATA = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+
       try {
-        const [contactData, newsletterData] = await Promise.all([apiClient.getContactSubmissions().catch(() => []), apiClient.getNewsletterSubscriptions().catch(() => [])]);
-        setContactSubmissions(Array.isArray(contactData) ? contactData : []);
-        setNewsletterSubscriptions(Array.isArray(newsletterData) ? newsletterData : []);
+        const [contactResult, newsletterResult] = await Promise.allSettled([apiClient.getContactSubmissions(), apiClient.getNewsletterSubscriptions()]);
+
+        // Handle contact submissions
+        if (contactResult.status === 'fulfilled') {
+          const contactData = contactResult.value;
+          console.log('Contact submissions:', contactData);
+          // Handle paginated response (Django REST framework format)
+          const submissions = Array.isArray(contactData) ? contactData : contactData?.results || [];
+          setContactSubmissions(submissions);
+        } else {
+          console.error('Error fetching contact submissions:', contactResult.reason);
+          if (USE_MOCK_DATA) {
+            // Use mock data for development
+            setContactSubmissions([
+              {
+                id: 1,
+                name: 'John Doe',
+                email: 'john.doe@example.com',
+                phone: '(555) 123-4567',
+                message: 'I am interested in learning more about your PHP housing program.',
+                created_at: new Date().toISOString(),
+              },
+              {
+                id: 2,
+                name: 'Jane Smith',
+                email: 'jane.smith@example.com',
+                phone: '(555) 987-6543',
+                message: 'Could you provide more information about your IOP program?',
+                created_at: new Date(Date.now() - 86400000).toISOString(),
+              },
+            ]);
+            console.log('Using mock contact submissions data');
+          } else {
+            setError(`Failed to load contact submissions: ${contactResult.reason?.message || 'Unknown error'}. The API endpoint may not be implemented yet.`);
+            setContactSubmissions([]);
+          }
+        }
+
+        // Handle newsletter subscriptions
+        if (newsletterResult.status === 'fulfilled') {
+          const newsletterData = newsletterResult.value;
+          console.log('Newsletter subscriptions:', newsletterData);
+          // Handle paginated response (Django REST framework format)
+          const subscriptions = Array.isArray(newsletterData) ? newsletterData : newsletterData?.results || [];
+          setNewsletterSubscriptions(subscriptions);
+        } else {
+          console.error('Error fetching newsletter subscriptions:', newsletterResult.reason);
+          if (USE_MOCK_DATA) {
+            // Use mock data for development
+            setNewsletterSubscriptions([
+              {
+                id: 1,
+                firstName: 'Alice',
+                lastName: 'Johnson',
+                email: 'alice.johnson@example.com',
+                created_at: new Date().toISOString(),
+              },
+              {
+                id: 2,
+                firstName: 'Bob',
+                lastName: 'Williams',
+                email: 'bob.williams@example.com',
+                created_at: new Date(Date.now() - 172800000).toISOString(),
+              },
+            ]);
+            console.log('Using mock newsletter subscriptions data');
+          } else {
+            const errorMsg = `Failed to load newsletter subscriptions: ${newsletterResult.reason?.message || 'Unknown error'}. The API endpoint may not be implemented yet.`;
+            setError((prevError) => (prevError ? `${prevError}\n${errorMsg}` : errorMsg));
+            setNewsletterSubscriptions([]);
+          }
+        }
       } catch (err) {
-        console.error('Error fetching submissions:', err);
-        setError('Failed to load form submissions. Please try again.');
+        console.error('Unexpected error fetching submissions:', err);
+        setError(`Failed to load form submissions: ${err.message || 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
@@ -70,6 +144,37 @@ function AdminPage() {
     }
   };
 
+  const handleDeleteClick = (type, id, name) => {
+    setDeleteModal({ show: true, type, id, name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    const { type, id } = deleteModal;
+    setDeleting(true);
+    setError('');
+
+    try {
+      if (type === 'contact') {
+        await apiClient.deleteContactSubmission(id);
+        setContactSubmissions(contactSubmissions.filter((item) => item.id !== id));
+      } else if (type === 'newsletter') {
+        await apiClient.deleteNewsletterSubscription(id);
+        setNewsletterSubscriptions(newsletterSubscriptions.filter((item) => item.id !== id));
+      }
+      setDeleteModal({ show: false, type: null, id: null, name: null });
+    } catch (err) {
+      console.error('Error deleting submission:', err);
+      setError(`Failed to delete ${type === 'contact' ? 'contact submission' : 'newsletter subscription'}. Please try again.`);
+      setDeleteModal({ show: false, type: null, id: null, name: null });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModal({ show: false, type: null, id: null, name: null });
+  };
+
   return (
     <Container className="py-5">
       <Row className="mb-4">
@@ -88,7 +193,16 @@ function AdminPage() {
 
       {error && (
         <Alert variant="danger" className="mb-4">
-          {error}
+          <Alert.Heading>Error Loading Submissions</Alert.Heading>
+          <div style={{ whiteSpace: 'pre-line' }}>{error}</div>
+          <hr />
+          <p className="mb-0 small">
+            <strong>Note:</strong> Make sure your Django backend has these endpoints implemented:
+            <br />• <code>GET /api/admin/contact-submissions/</code>
+            <br />• <code>GET /api/admin/newsletter-subscriptions/</code>
+            <br />
+            Check the browser console for more details.
+          </p>
         </Alert>
       )}
 
@@ -113,6 +227,7 @@ function AdminPage() {
                         <th>Phone</th>
                         <th>Message</th>
                         <th>Submitted</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -127,6 +242,11 @@ function AdminPage() {
                             <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{submission.message || 'N/A'}</div>
                           </td>
                           <td>{formatDate(submission.created_at || submission.submitted_at || submission.date)}</td>
+                          <td>
+                            <Button variant="outline-danger" size="sm" onClick={() => handleDeleteClick('contact', submission.id, submission.name || submission.email)}>
+                              Delete
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -158,6 +278,7 @@ function AdminPage() {
                         <th>Last Name</th>
                         <th>Email</th>
                         <th>Subscribed</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -169,6 +290,11 @@ function AdminPage() {
                             <a href={`mailto:${subscription.email}`}>{subscription.email || 'N/A'}</a>
                           </td>
                           <td>{formatDate(subscription.created_at || subscription.subscribed_at || subscription.date)}</td>
+                          <td>
+                            <Button variant="outline-danger" size="sm" onClick={() => handleDeleteClick('newsletter', subscription.id, subscription.email || `${subscription.firstName || subscription.first_name || ''} ${subscription.lastName || subscription.last_name || ''}`.trim())}>
+                              Delete
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -179,6 +305,30 @@ function AdminPage() {
           </Card>
         </Col>
       </Row>
+
+      {/* Delete Confirmation Modal */}
+      <Modal show={deleteModal.show} onHide={handleDeleteCancel}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Delete</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Are you sure you want to delete this {deleteModal.type === 'contact' ? 'contact submission' : 'newsletter subscription'}?
+          {deleteModal.name && (
+            <p className="mt-2 mb-0">
+              <strong>{deleteModal.name}</strong>
+            </p>
+          )}
+          <p className="text-danger mt-2 mb-0">This action cannot be undone.</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleDeleteCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleDeleteConfirm} disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 }

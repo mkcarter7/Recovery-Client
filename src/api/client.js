@@ -78,6 +78,8 @@ export const apiClient = {
   // Admin - Form Submissions
   getContactSubmissions: () => apiRequest('/api/admin/contact-submissions/'),
   getNewsletterSubscriptions: () => apiRequest('/api/admin/newsletter-subscriptions/'),
+  deleteContactSubmission: (id) => apiRequest(`/api/admin/contact-submissions/${id}/`, { method: 'DELETE' }),
+  deleteNewsletterSubscription: (id) => apiRequest(`/api/admin/newsletter-subscriptions/${id}/`, { method: 'DELETE' }),
 
   // Generic methods
   get: (endpoint) => apiRequest(endpoint, { method: 'GET' }),
