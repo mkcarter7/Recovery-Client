@@ -4,6 +4,14 @@ const nextConfig = {
   eslint: {
     dirs: ['pages', 'components', 'lib'], // Run ESLint on specified directories during development
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+      },
+    ],
+  },
 };
 
 module.exports = nextConfig;
