@@ -1,24 +1,73 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, Card, Button } from 'react-bootstrap';
 import Link from 'next/link';
 import { apiClient } from '@/api/client';
 
+const HERO_DEFAULTS = {
+  backgroundGradient: 'linear-gradient(135deg, #000000 0%, #8b0000 50%, #dc3545 100%)',
+  headline: 'Find Your Path to Recovery',
+  subheadline: 'WHO WE ARE ARE WHERE WE ARE LOCATED',
+  description: 'At 2nd Chance Recovery, WHAT WE BELIEVE',
+  primaryCtaText: 'Get Started',
+  primaryCtaHref: '/contact',
+  secondaryCtaText: 'Learn More',
+  secondaryCtaHref: '/programs/php-housing',
+};
+
+const CONTACT_DEFAULTS = {
+  blurb: 'Everyone deserves access to quality recovery and treatment services, regardless of their financial situation.',
+};
+
+const getContentValue = (content, key, fallback = '') => {
+  if (!content || typeof content !== 'object') {
+    return fallback;
+  }
+  const value = content[key];
+  return value === undefined || value === null || value === '' ? fallback : value;
+};
+
+function mapHeroContent(contentMap) {
+  return {
+    backgroundGradient: getContentValue(contentMap, 'hero_background_gradient', HERO_DEFAULTS.backgroundGradient),
+    headline: getContentValue(contentMap, 'hero_headline', HERO_DEFAULTS.headline),
+    subheadline: getContentValue(contentMap, 'hero_subheadline', HERO_DEFAULTS.subheadline),
+    description: getContentValue(contentMap, 'hero_description', HERO_DEFAULTS.description),
+    primaryCtaText: getContentValue(contentMap, 'hero_primary_cta_text', HERO_DEFAULTS.primaryCtaText),
+    primaryCtaHref: getContentValue(contentMap, 'hero_primary_cta_href', HERO_DEFAULTS.primaryCtaHref),
+    secondaryCtaText: getContentValue(contentMap, 'hero_secondary_cta_text', HERO_DEFAULTS.secondaryCtaText),
+    secondaryCtaHref: getContentValue(contentMap, 'hero_secondary_cta_href', HERO_DEFAULTS.secondaryCtaHref),
+  };
+}
+
+function mapContactContent(contentMap) {
+  return {
+    blurb: getContentValue(contentMap, 'contact_blurb', CONTACT_DEFAULTS.blurb),
+  };
+}
+
 function Home() {
   const [programs, setPrograms] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
+  const [heroContent, setHeroContent] = useState(HERO_DEFAULTS);
+  const [contactContent, setContactContent] = useState(CONTACT_DEFAULTS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        // Fetch programs and testimonials from API
-        const [programsData, testimonialsData] = await Promise.all([apiClient.getPrograms().catch(() => []), apiClient.getTestimonials().catch(() => [])]);
-        setPrograms(programsData);
-        setTestimonials(testimonialsData);
+        const [programsData, testimonialsData, siteContentData] = await Promise.all([apiClient.getPrograms().catch(() => []), apiClient.getTestimonials().catch(() => []), apiClient.getSiteContent().catch(() => ({}))]);
+
+        setPrograms(Array.isArray(programsData) ? programsData : []);
+        setTestimonials(Array.isArray(testimonialsData) ? testimonialsData : []);
+        setHeroContent(mapHeroContent(siteContentData));
+        setContactContent(mapContactContent(siteContentData));
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching homepage data:', error);
+        setHeroContent(HERO_DEFAULTS);
+        setContactContent(CONTACT_DEFAULTS);
       } finally {
         setLoading(false);
       }
@@ -27,13 +76,34 @@ function Home() {
     fetchData();
   }, []);
 
+  const heroButtons = useMemo(
+    () =>
+      [
+        heroContent.primaryCtaText
+          ? {
+              text: heroContent.primaryCtaText,
+              href: heroContent.primaryCtaHref || HERO_DEFAULTS.primaryCtaHref,
+              variant: 'light',
+            }
+          : null,
+        heroContent.secondaryCtaText
+          ? {
+              text: heroContent.secondaryCtaText,
+              href: heroContent.secondaryCtaHref || HERO_DEFAULTS.secondaryCtaHref,
+              variant: 'outline-light',
+            }
+          : null,
+      ].filter(Boolean),
+    [heroContent.primaryCtaHref, heroContent.primaryCtaText, heroContent.secondaryCtaHref, heroContent.secondaryCtaText],
+  );
+
   return (
     <>
       {/* Hero Section */}
       <section
         className="text-white py-5"
         style={{
-          background: 'linear-gradient(135deg, #000000 0%, #8b0000 50%, #dc3545 100%)',
+          background: heroContent.backgroundGradient,
           minHeight: '70vh',
           display: 'flex',
           alignItems: 'center',
@@ -42,20 +112,17 @@ function Home() {
         <Container>
           <Row className="align-items-center">
             <Col lg={8}>
-              <h1 className="display-4 fw-bold mb-4">Find Your Path to Recovery</h1>
-              <p className="lead mb-4">WHO WE ARE ARE WHERE WE ARE LOCATED</p>
-              <p className="mb-4">At 2nd Chance Recovery, WHAT WE BELEIVE</p>
+              <h1 className="display-4 fw-bold mb-4">{heroContent.headline}</h1>
+              {heroContent.subheadline && <p className="lead mb-4">{heroContent.subheadline}</p>}
+              {heroContent.description && <p className="mb-4">{heroContent.description}</p>}
               <div className="d-flex gap-3 flex-wrap">
-                <Link href="/contact">
-                  <Button variant="light" size="lg">
-                    Get Started
-                  </Button>
-                </Link>
-                <Link href="/programs/php-housing">
-                  <Button variant="outline-light" size="lg">
-                    Learn More
-                  </Button>
-                </Link>
+                {heroButtons.map((btn) => (
+                  <Link key={btn.text} href={btn.href}>
+                    <Button variant={btn.variant} size="lg">
+                      {btn.text}
+                    </Button>
+                  </Link>
+                ))}
               </div>
             </Col>
           </Row>
@@ -77,8 +144,8 @@ function Home() {
                   <Col md={4} key={program.id} className="mb-4">
                     <Card className="h-100 shadow-sm">
                       <Card.Body>
-                        <Card.Title className="h4 mb-3">{program.name || program.title}</Card.Title>
-                        <Card.Text>{program.description || program.desc || 'No description available.'}</Card.Text>
+                        <Card.Title className="h4 mb-3">{program.name}</Card.Title>
+                        <Card.Text>{program.short_description || program.description || 'No description available.'}</Card.Text>
                         <Link href={`/programs/${program.slug || program.id}`}>
                           <Button variant="primary">Learn More</Button>
                         </Link>
@@ -181,12 +248,12 @@ function Home() {
       <section
         className="py-5 text-white text-center"
         style={{
-          background: 'linear-gradient(135deg, #000000 0%, #8b0000 50%, #dc3545 100%)',
+          background: heroContent.backgroundGradient,
         }}
       >
         <Container>
           <h2 className="mb-4">Start Here</h2>
-          <p className="lead mb-4">everyone deserves access to quality recovery and treatment services, regardless of their financial situation.</p>
+          {contactContent.blurb && <p className="lead mb-4">{contactContent.blurb}</p>}
           <Link href="/contact">
             <Button variant="light" size="lg">
               Call Us Today

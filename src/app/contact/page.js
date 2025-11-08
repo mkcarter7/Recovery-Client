@@ -1,8 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Container, Row, Col, Card, Form, Button, Alert } from 'react-bootstrap';
 import { apiClient } from '@/api/client';
+
+const CONTACT_DEFAULTS = {
+  phone: '+1 (833) HUSTLE 5',
+  email: 'info@recoverycenter.org',
+  address: 'Cheatham County, Tennessee',
+  blurb: "We believe that everyone deserves access to quality recovery and treatment services, regardless of their financial situation. That's why we offer a wide range of payment options to make care accessible to all.",
+};
+
+const getContentValue = (content, key, fallback) => {
+  if (!content || typeof content !== 'object') {
+    return fallback;
+  }
+  const value = content[key];
+  return value === undefined || value === null || value === '' ? fallback : value;
+};
 
 function Contact() {
   const [formData, setFormData] = useState({
@@ -14,6 +29,44 @@ function Contact() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [contactInfo, setContactInfo] = useState(CONTACT_DEFAULTS);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadContactContent = async () => {
+      try {
+        const siteContent = await apiClient.getSiteContent().catch(() => ({}));
+        if (!isMounted) return;
+
+        setContactInfo({
+          phone: getContentValue(siteContent, 'contact_phone', CONTACT_DEFAULTS.phone),
+          email: getContentValue(siteContent, 'contact_email', CONTACT_DEFAULTS.email),
+          address: getContentValue(siteContent, 'contact_address', CONTACT_DEFAULTS.address),
+          blurb: getContentValue(siteContent, 'contact_blurb', CONTACT_DEFAULTS.blurb),
+        });
+      } catch (err) {
+        console.error('Failed to load contact site content:', err);
+        if (isMounted) {
+          setContactInfo(CONTACT_DEFAULTS);
+        }
+      }
+    };
+
+    loadContactContent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const phoneHref = useMemo(() => {
+    if (!contactInfo.phone) {
+      return undefined;
+    }
+    const numeric = contactInfo.phone.replace(/[^\d+]/g, '');
+    return `tel:${numeric}`;
+  }, [contactInfo.phone]);
 
   const handleChange = (e) => {
     setFormData({
@@ -65,21 +118,29 @@ function Contact() {
                   <Card.Text>
                     <strong>Phone:</strong>
                     <br />
-                    <a href="tel:+18334878535" className="text-decoration-none">
-                      +1 (833) HUSTLE 5
-                    </a>
+                    {contactInfo.phone ? (
+                      <a href={phoneHref} className="text-decoration-none">
+                        {contactInfo.phone}
+                      </a>
+                    ) : (
+                      'Coming soon'
+                    )}
                   </Card.Text>
                   <Card.Text>
                     <strong>Email:</strong>
                     <br />
-                    <a href="mailto:info@recoverycenter.org" className="text-decoration-none">
-                      info@recoverycenter.org
-                    </a>
+                    {contactInfo.email ? (
+                      <a href={`mailto:${contactInfo.email}`} className="text-decoration-none">
+                        {contactInfo.email}
+                      </a>
+                    ) : (
+                      'Coming soon'
+                    )}
                   </Card.Text>
                   <Card.Text>
                     <strong>Address:</strong>
                     <br />
-                    Cheatham County, Tennessee
+                    {contactInfo.address || 'Coming soon'}
                   </Card.Text>
                 </Card.Body>
               </Card>
@@ -123,8 +184,8 @@ function Contact() {
             <Col>
               <Card className="bg-light">
                 <Card.Body>
-                  <h3 className="mb-3">Payment & Insurance Information</h3>
-                  <p>We believe that everyone deserves access to quality recovery and treatment services, regardless of their financial situation. That&apos;s why we offer a wide range of payment options to make care accessible to all.</p>
+                  <h3 className="mb-3">Payment &amp; Insurance Information</h3>
+                  <p>{contactInfo.blurb}</p>
                   <p className="mb-0">We are in-network with TNCARE, BlueCare, United Healthcare, WellPoint, and Blue Cross Blue Shield, and we also accept many out-of-network policies. In addition, we provide grant and scholarship opportunities to help ease the financial burden and offer flexible sliding-scale payment plans tailored to your needs.</p>
                 </Card.Body>
               </Card>

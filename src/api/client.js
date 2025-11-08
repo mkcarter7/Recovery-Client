@@ -40,6 +40,10 @@ async function apiRequest(endpoint, options = {}) {
       throw new Error(error.message || `HTTP error! status: ${response.status}`);
     }
 
+    if (response.status === 204) {
+      return null;
+    }
+
     return response.json();
   } catch (error) {
     console.error('API request failed:', error);
@@ -47,13 +51,45 @@ async function apiRequest(endpoint, options = {}) {
   }
 }
 
+const normalizeListResponse = (data) => {
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (data && Array.isArray(data.results)) {
+    return data.results;
+  }
+  return [];
+};
+
 // API methods
 export const apiClient = {
-  // Programs
+  // Programs (public)
   getPrograms: () => apiRequest('/api/programs/'),
   getProgram: (id) => apiRequest(`/api/programs/${id}/`),
 
-  // About/Content
+  // Site content
+  getSiteContent: () => apiRequest('/api/site-content/all/'),
+  updateSiteContent: (key, value) =>
+    apiRequest(`/api/admin/site-content/${key}/`, {
+      method: 'PUT',
+      body: JSON.stringify({ content: value ?? '' }),
+    }),
+
+  // Programs (admin)
+  getAdminPrograms: () => apiRequest('/api/admin/programs/').then((data) => normalizeListResponse(data)),
+  createProgram: (payload) =>
+    apiRequest('/api/admin/programs/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateProgram: (id, payload) =>
+    apiRequest(`/api/admin/programs/${id}/`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  deleteProgram: (id) => apiRequest(`/api/admin/programs/${id}/`, { method: 'DELETE' }),
+
+  // About/Content legacy (TODO: remove if unused)
   getAbout: () => apiRequest('/api/about/'),
   getTeam: () => apiRequest('/api/team/'),
   getPartners: () => apiRequest('/api/partners/'),
@@ -81,7 +117,7 @@ export const apiClient = {
   deleteContactSubmission: (id) => apiRequest(`/api/admin/contact-submissions/${id}/`, { method: 'DELETE' }),
   deleteNewsletterSubscription: (id) => apiRequest(`/api/admin/newsletter-subscriptions/${id}/`, { method: 'DELETE' }),
 
-  // Generic methods
+  // Generic helpers
   get: (endpoint) => apiRequest(endpoint, { method: 'GET' }),
   post: (endpoint, data) =>
     apiRequest(endpoint, {
